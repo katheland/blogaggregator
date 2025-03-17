@@ -14,15 +14,14 @@ type Config struct {
 }
 
 // get the file path to the config
-// this feels too hard-coded but I'll figure that out later
-const configFileName = ".gatorconfig.json"
-const configFilePath = "/workspace/github.com/katheland/blogaggregator/"
+const configFileName = "/.gatorconfig.json"
 func getConfigFilePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return homeDir + configFilePath + configFileName, nil
+	fmt.Println(homeDir + configFileName)
+	return homeDir + configFileName, nil
 }
 
 // read the config json and make a Config struct from it
