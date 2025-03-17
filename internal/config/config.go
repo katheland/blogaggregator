@@ -20,7 +20,6 @@ func getConfigFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Println(homeDir + configFileName)
 	return homeDir + configFileName, nil
 }
 
@@ -50,9 +49,10 @@ func Read() (Config, error) {
 }
 
 // set the current username
-func (c* Config) SetUser(username string) {
+func (c* Config) SetUser(username string) error {
 	c.CurrentUserName = username
-	write(c)
+	err := write(c)
+	return err
 }
 
 // overwrites the config file
