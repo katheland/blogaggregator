@@ -177,6 +177,28 @@ func handlerFollowing(s *state, cmd command, user database.User) error {
 	return nil
 }
 
+// command: unfollow feed (by url) for the current user
+func handlerUnfollow(s *state, cmd command, user database.User) error {
+	if len(cmd.arguments) == 0 {
+		return errors.New("unfollow requires a url")
+	}
+	targetFeed, err := s.database.GetFeedByUrl(context.Background(), sql.NullString{String: cmd.arguments[0], Valid: true,})
+	if err != nil {
+		return err
+	}
+	err = s.database.RemoveFeedFollow(
+		context.Background(), 
+		database.RemoveFeedFollowParams {
+			UserID: uuid.NullUUID{UUID: user.ID, Valid: true},
+			FeedID: uuid.NullUUID{UUID: targetFeed.ID, Valid: true},
+		})
+	if err != nil {
+		return err
+	}
+	fmt.Println("unfollowed successfully")
+	return nil
+}
+
 // register handlers
 func registerHandlers(c commands) {
 	c.register("login", handlerLogin)
@@ -188,4 +210,5 @@ func registerHandlers(c commands) {
 	c.register("feeds", handlerFeeds)
 	c.register("follow", middlewareLoggedIn(handlerFollow))
 	c.register("following", middlewareLoggedIn(handlerFollowing))
+	c.register("unfollow", middlewareLoggedIn(handlerUnfollow))
 }
