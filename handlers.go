@@ -115,6 +115,20 @@ func handlerAddFeed(s *state, cmd command) error {
 	}
 	fmt.Println("Feed successfully registered")
 	fmt.Println(fmt.Sprintf("%v %v %v %v %v %v", feed.ID, feed.CreatedAt, feed.UpdatedAt, feed.Name, feed.Url, feed.UserID))
+	// and then we register it as followed too
+	feedFollow, err := s.database.CreateFeedFollow(
+		context.Background(),
+		database.CreateFeedFollowParams {
+			ID: uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			UserID: uuid.NullUUID{UUID: currentUser.ID, Valid: true},
+			FeedID: uuid.NullUUID{UUID: feed.ID, Valid: true},
+		})
+	if err != nil {
+		return err
+	}
+	fmt.Println(fmt.Sprintf("%v is now following %v", feedFollow.UserName.String, feedFollow.FeedName.String))
 	return nil
 }
 
@@ -130,6 +144,47 @@ func handlerFeeds(s *state, cmd command) error {
 	return nil
 }
 
+// command: follow a feed based on its url
+func handlerFollow(s *state, cmd command) error {
+	if len(cmd.arguments) == 0 {
+		return errors.New("follow requires a url")
+	}
+	currentUser, err := s.database.GetUser(context.Background(), sql.NullString{String: s.config.CurrentUserName, Valid: true,})
+	if err != nil {
+		return err
+	}
+	targetFeed, err := s.database.GetFeedByUrl(context.Background(), sql.NullString{String: cmd.arguments[0], Valid: true,})
+	if err != nil {
+		return err
+	}
+	feedFollow, err := s.database.CreateFeedFollow(
+		context.Background(),
+		database.CreateFeedFollowParams {
+			ID: uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			UserID: uuid.NullUUID{UUID: currentUser.ID, Valid: true},
+			FeedID: uuid.NullUUID{UUID: targetFeed.ID, Valid: true},
+		})
+	if err != nil {
+		return err
+	}
+	fmt.Println(fmt.Sprintf("%v is now following %v", feedFollow.UserName.String, feedFollow.FeedName.String))
+	return nil;
+}
+
+// command: get all feeds followed by the current user
+func handlerFollowing(s *state, cmd command) error {
+	followed, err := s.database.GetFeedFollowsForUser(context.Background(), sql.NullString{String: s.config.CurrentUserName, Valid: true,})
+	if err != nil {
+		return err
+	}
+	for _, f := range followed {
+		fmt.Println(f.FeedName.String)
+	}
+	return nil
+}
+
 // register handlers
 func registerHandlers(c commands) {
 	c.register("login", handlerLogin)
@@ -139,4 +194,6 @@ func registerHandlers(c commands) {
 	c.register("agg", handlerAgg)
 	c.register("addfeed", handlerAddFeed)
 	c.register("feeds", handlerFeeds)
+	c.register("follow", handlerFollow)
+	c.register("following", handlerFollowing)
 }
