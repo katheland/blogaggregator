@@ -92,13 +92,9 @@ func handlerAgg(s *state, cmd command) error {
 }
 
 // command: add a feed
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.arguments) < 2 {
 		return errors.New("addfeed requires a name and a url")
-	}
-	currentUser, err := s.database.GetUser(context.Background(), sql.NullString{String: s.config.CurrentUserName, Valid: true,})
-	if err != nil {
-		return err
 	}
 	feed, err := s.database.CreateFeed(
 		context.Background(),
@@ -108,7 +104,7 @@ func handlerAddFeed(s *state, cmd command) error {
 			UpdatedAt: time.Now(),
 			Name: sql.NullString{String: cmd.arguments[0], Valid: true,},
 			Url: sql.NullString{String: cmd.arguments[1], Valid: true,},
-			UserID: uuid.NullUUID{UUID: currentUser.ID, Valid: true},
+			UserID: uuid.NullUUID{UUID: user.ID, Valid: true},
 		})
 	if err != nil {
 		return err
@@ -122,7 +118,7 @@ func handlerAddFeed(s *state, cmd command) error {
 			ID: uuid.New(),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
-			UserID: uuid.NullUUID{UUID: currentUser.ID, Valid: true},
+			UserID: uuid.NullUUID{UUID: user.ID, Valid: true},
 			FeedID: uuid.NullUUID{UUID: feed.ID, Valid: true},
 		})
 	if err != nil {
@@ -145,13 +141,9 @@ func handlerFeeds(s *state, cmd command) error {
 }
 
 // command: follow a feed based on its url
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.arguments) == 0 {
 		return errors.New("follow requires a url")
-	}
-	currentUser, err := s.database.GetUser(context.Background(), sql.NullString{String: s.config.CurrentUserName, Valid: true,})
-	if err != nil {
-		return err
 	}
 	targetFeed, err := s.database.GetFeedByUrl(context.Background(), sql.NullString{String: cmd.arguments[0], Valid: true,})
 	if err != nil {
@@ -163,7 +155,7 @@ func handlerFollow(s *state, cmd command) error {
 			ID: uuid.New(),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
-			UserID: uuid.NullUUID{UUID: currentUser.ID, Valid: true},
+			UserID: uuid.NullUUID{UUID: user.ID, Valid: true},
 			FeedID: uuid.NullUUID{UUID: targetFeed.ID, Valid: true},
 		})
 	if err != nil {
@@ -174,8 +166,8 @@ func handlerFollow(s *state, cmd command) error {
 }
 
 // command: get all feeds followed by the current user
-func handlerFollowing(s *state, cmd command) error {
-	followed, err := s.database.GetFeedFollowsForUser(context.Background(), sql.NullString{String: s.config.CurrentUserName, Valid: true,})
+func handlerFollowing(s *state, cmd command, user database.User) error {
+	followed, err := s.database.GetFeedFollowsForUser(context.Background(), user.Name)
 	if err != nil {
 		return err
 	}
@@ -192,8 +184,8 @@ func registerHandlers(c commands) {
 	c.register("reset", handlerReset)
 	c.register("users", handlerUsers)
 	c.register("agg", handlerAgg)
-	c.register("addfeed", handlerAddFeed)
+	c.register("addfeed", middlewareLoggedIn(handlerAddFeed))
 	c.register("feeds", handlerFeeds)
-	c.register("follow", handlerFollow)
-	c.register("following", handlerFollowing)
+	c.register("follow", middlewareLoggedIn(handlerFollow))
+	c.register("following", middlewareLoggedIn(handlerFollowing))
 }
