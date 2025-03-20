@@ -8,6 +8,8 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"time"
+	"strings"
+	"strconv"
 )
 
 // command: log in
@@ -81,13 +83,64 @@ func handlerUsers(s *state, cmd command) error {
 }
 
 // command: aggregator
-// (to be expanded)
 func handlerAgg(s *state, cmd command) error {
-	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if len(cmd.arguments) == 0 {
+		return errors.New("agg requires a time between requests")
+	}
+	timeBetweenRequests, err := time.ParseDuration(cmd.arguments[0])
 	if err != nil {
 		return err
 	}
-	fmt.Println(feed)
+	ticker := time.NewTicker(timeBetweenRequests)
+	for ; ; <-ticker.C {
+		err = scrapeFeeds(s)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// helper for the aggregator - prints the titles of the next fetched feed
+func scrapeFeeds(s *state) error {
+	fetch, err := s.database.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return err
+	}
+	err = s.database.MarkFeedFetched(
+		context.Background(),
+		database.MarkFeedFetchedParams{
+			ID: fetch.ID,
+			UpdatedAt: time.Now(),
+		})
+	if err != nil {
+		return err
+	}
+	feed, err := fetchFeed(context.Background(), fetch.Url.String)
+	if err != nil {
+		return err
+	}
+	for _, item := range feed.Channel.Item {
+		post, err := s.database.CreatePost(
+			context.Background(),
+			database.CreatePostParams{
+				ID: uuid.New(),
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+				Title: item.Title,
+				Url: item.Link,
+				Description: sql.NullString{String: item.Description, Valid: true,},
+				PublishedAt: item.PubDate,
+				FeedID: fetch.ID,
+			})
+		if err != nil {
+			if !strings.Contains(fmt.Sprint(err), "posts_url_key") {
+				fmt.Println(err)
+			}
+		} else {
+			fmt.Println(fmt.Sprintf("%v: %v", post.Title, post.Url))
+		}
+	}
 	return nil
 }
 
@@ -199,6 +252,36 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 	return nil
 }
 
+// command: browse the user's feed's posts (takes a limit parameter, defaults to 2)
+func handlerBrowse(s *state, cmd command, user database.User) error {
+	limit := 2
+	if len(cmd.arguments) > 0 {
+		l, err := strconv.Atoi(cmd.arguments[0])
+		if err != nil {
+			fmt.Println("limit should be an integer; defaulting to 2")
+		} else {
+			limit = l
+		}
+	}
+	posts, err := s.database.GetPostsForUser(
+		context.Background(),
+		database.GetPostsForUserParams {
+			UserID: uuid.NullUUID{UUID: user.ID, Valid: true},
+			Limit: int32(limit),
+		})
+	if err != nil {
+		return err
+	}
+	for _, p := range posts {
+		fmt.Println(p.Title)
+		fmt.Println(p.Url)
+		fmt.Println("Published at: " + p.PublishedAt)
+		fmt.Println(p.Description.String)
+		fmt.Println("*")
+	}
+	return nil
+}
+
 // register handlers
 func registerHandlers(c commands) {
 	c.register("login", handlerLogin)
@@ -211,4 +294,5 @@ func registerHandlers(c commands) {
 	c.register("follow", middlewareLoggedIn(handlerFollow))
 	c.register("following", middlewareLoggedIn(handlerFollowing))
 	c.register("unfollow", middlewareLoggedIn(handlerUnfollow))
+	c.register("browse", middlewareLoggedIn(handlerBrowse))
 }
