@@ -38,3 +38,5 @@ You'll also need to create a .gatorconfig.json file in your home directory.  It 
 
 # Ideas For The Future
 - I mean, login could have actual credentials, for one.
+- Filtering and/or paginating the browse could be useful.
+- Web browser support of some kind?
