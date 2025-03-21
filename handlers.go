@@ -34,7 +34,7 @@ func handlerRegister(s *state, cmd command) error {
 	if len(cmd.arguments) == 0 {
 		return errors.New("register requires a username")
 	}
-	user, err := s.database.CreateUser(
+	_, err := s.database.CreateUser(
 		context.Background(), 
 		database.CreateUserParams{
 			ID: uuid.New(),
@@ -50,7 +50,7 @@ func handlerRegister(s *state, cmd command) error {
 		return err
 	}
 	fmt.Println("user successfully registered and set")
-	fmt.Println(fmt.Sprintf("%v %v %v %v", user.ID, user.CreatedAt, user.UpdatedAt, user.Name))
+	//fmt.Println(fmt.Sprintf("%v %v %v %v", user.ID, user.CreatedAt, user.UpdatedAt, user.Name))
 	return nil
 }
 
@@ -91,6 +91,11 @@ func handlerAgg(s *state, cmd command) error {
 	if err != nil {
 		return err
 	}
+	onesec, _ := time.ParseDuration("1s")
+	if timeBetweenRequests < onesec {
+		fmt.Println("We're not looking to DOS anyone here >_<  You get every second, okay?")
+		timeBetweenRequests = onesec
+	}
 	ticker := time.NewTicker(timeBetweenRequests)
 	for ; ; <-ticker.C {
 		err = scrapeFeeds(s)
@@ -121,6 +126,11 @@ func scrapeFeeds(s *state) error {
 		return err
 	}
 	for _, item := range feed.Channel.Item {
+		format := "Mon, 02 Jan 2006 15:04:05 -0700"
+		published, err := time.Parse(format, item.PubDate)
+		if err != nil {
+			fmt.Println("Publishing time format is weird: " + item.PubDate)
+		}
 		post, err := s.database.CreatePost(
 			context.Background(),
 			database.CreatePostParams{
@@ -130,7 +140,7 @@ func scrapeFeeds(s *state) error {
 				Title: item.Title,
 				Url: item.Link,
 				Description: sql.NullString{String: item.Description, Valid: true,},
-				PublishedAt: item.PubDate,
+				PublishedAt: published,
 				FeedID: fetch.ID,
 			})
 		if err != nil {
@@ -163,7 +173,7 @@ func handlerAddFeed(s *state, cmd command, user database.User) error {
 		return err
 	}
 	fmt.Println("Feed successfully registered")
-	fmt.Println(fmt.Sprintf("%v %v %v %v %v %v", feed.ID, feed.CreatedAt, feed.UpdatedAt, feed.Name, feed.Url, feed.UserID))
+	//fmt.Println(fmt.Sprintf("%v %v %v %v %v %v", feed.ID, feed.CreatedAt, feed.UpdatedAt, feed.Name, feed.Url, feed.UserID))
 	// and then we register it as followed too
 	feedFollow, err := s.database.CreateFeedFollow(
 		context.Background(),
@@ -275,7 +285,7 @@ func handlerBrowse(s *state, cmd command, user database.User) error {
 	for _, p := range posts {
 		fmt.Println(p.Title)
 		fmt.Println(p.Url)
-		fmt.Println("Published at: " + p.PublishedAt)
+		fmt.Println(fmt.Sprintf("Published at: %v", p.PublishedAt))
 		fmt.Println(p.Description.String)
 		fmt.Println("*")
 	}
